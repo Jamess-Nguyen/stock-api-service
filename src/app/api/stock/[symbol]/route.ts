@@ -5,6 +5,18 @@ type symbolData = {
   "url": string
 }
 
+async function fetchStooqEod(symbol: string){
+  const url = `https://stooq.com/q/d/l/?s=${symbol}&i=d&d1=20250901&d2=20250930`;
+  const stockResponse = await fetch(url, { cache: 'no-store' });
+  const stockCsv = await stockResponse.text();
+  const [header, ...lines] = stockCsv.split(/\r?\n/);
+  console.log("i'm here")
+  console.log(stockResponse)
+  lines.forEach((line) => {
+    console.log(line)
+  });
+}
+
 export async function GET(request: Request){
   const url = new URL(request.url);
   const urlArray = url.pathname.split("/").filter((val)=> {return val.length>0});
@@ -23,6 +35,6 @@ export async function GET(request: Request){
     headers: headers
   }
   const response = new Response(jsonData, init)
-
+  fetchStooqEod(symbol)
   return response
 }
