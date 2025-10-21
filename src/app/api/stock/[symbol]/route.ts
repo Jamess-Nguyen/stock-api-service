@@ -1,10 +1,5 @@
 import { headers } from "next/headers";
 
-type symbolData = {
-  "stock": string
-  "url": string
-}
-
 type DateRange = { 
   startDate: string
   endDate: string 
@@ -39,20 +34,19 @@ function getStartEndDates(dateOffset: number): DateRange {
 
 }
 
-async function fetchStooqEod(symbol: string) {
-  const dayRange = 2;
+async function fetchStooqEod(symbol: string): Promise<string> {
+  const dayRange = 5; // Minimum dayRange must be 2 to get the most recent day
   const { startDate, endDate } = getStartEndDates(dayRange);
   const url = `https://stooq.com/q/d/l/?s=${symbol}&i=d&d1=${startDate}&d2=${endDate}`;
   const stockResponse = await fetch(url, { cache: 'no-store' });
   const stockCsv = await stockResponse.text();
-
   const [header, ...rows] = stockCsv.split(/\r?\n/);
-  const stockRows: StooqStock[] = rows
+  const stockRows: Map<string, StooqStock> = rows
     .filter((cell) => {
       return cell.length > 0;
     })
-    .map((line) => {
-      const [date, open, high, low, close, volume] = line.split(",");
+    .map((row) => {
+      const [date, open, high, low, close, volume] = row.split(",");
       const rowVal = {
         symbol: symbol,
         date: date,
@@ -63,23 +57,31 @@ async function fetchStooqEod(symbol: string) {
         volume: Number(volume),
       };
       return rowVal;
-    });
+    })
+    .reduce((acc, row) => {
+      acc.set(row.date, row);
+      return acc;
+    }, new Map<string, StooqStock>());
 
-  stockRows.forEach((row) => {
-    console.log(row);
+
+  stockRows.forEach((rec, date) => {
+    console.log(date, rec);
   });
 
+  const byDateObj = Object.fromEntries(stockRows) as Record<string, StooqStock>;
+  const jsonData = JSON.stringify(byDateObj, null, 2);
+
+  return jsonData;
 }
 
 export async function GET(request: Request){
+  // Path Stuff
   const url = new URL(request.url);
   const urlArray = url.pathname.split("/").filter((val)=> {return val.length>0});
   const symbol =urlArray[urlArray.length-1];
-  const symbolData: symbolData = {
-    "stock": symbol,
-    "url": url.pathname
-  }
-  const jsonData = JSON.stringify(symbolData)
+  
+  // Reponse Payload + Options Object (Init)
+  const jsonData = await fetchStooqEod(symbol);
   const headers = new Headers({
     "Content-Type": "application/json"
   })
@@ -88,7 +90,7 @@ export async function GET(request: Request){
     statusText: "OK",
     headers: headers
   }
+
   const response = new Response(jsonData, init)
-  fetchStooqEod(symbol)
   return response
 }
