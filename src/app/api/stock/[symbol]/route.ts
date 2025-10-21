@@ -1,5 +1,3 @@
-import { headers } from "next/headers";
-
 type DateRange = { 
   startDate: string
   endDate: string 
@@ -34,20 +32,15 @@ function getStartEndDates(dateOffset: number): DateRange {
 
 }
 
-async function fetchStooqEod(symbol: string): Promise<string> {
-  const dayRange = 5; // Minimum dayRange must be 2 to get the most recent day
-  const { startDate, endDate } = getStartEndDates(dayRange);
-  const url = `https://stooq.com/q/d/l/?s=${symbol}&i=d&d1=${startDate}&d2=${endDate}`;
-  const stockResponse = await fetch(url, { cache: 'no-store' });
-  const stockCsv = await stockResponse.text();
-  const [header, ...rows] = stockCsv.split(/\r?\n/);
+function parseStooqCsv(csv: string, symbol: string): Map<string, StooqStock> {
+  const [header, ...rows] = csv.split(/\r?\n/);
   const stockRows: Map<string, StooqStock> = rows
-    .filter((cell) => {
+    .filter((cell: string) => {
       return cell.length > 0;
     })
-    .map((row) => {
+    .map((row: string) => {
       const [date, open, high, low, close, volume] = row.split(",");
-      const rowVal = {
+      const rowVal: StooqStock = {
         symbol: symbol,
         date: date,
         open: Number(open),
@@ -58,19 +51,26 @@ async function fetchStooqEod(symbol: string): Promise<string> {
       };
       return rowVal;
     })
-    .reduce((acc, row) => {
+    .reduce((acc: Map<string, StooqStock>, row: StooqStock) => {
       acc.set(row.date, row);
       return acc;
     }, new Map<string, StooqStock>());
 
+  return stockRows;
+}
 
-  stockRows.forEach((rec, date) => {
-    console.log(date, rec);
-  });
-
+async function fetchStooqEod(symbol: string): Promise<string> {
+  // Curl & Process the Data
+  const dayRange = 5; // Range is exclusive
+  const { startDate, endDate } = getStartEndDates(dayRange);
+  const url = `https://stooq.com/q/d/l/?s=${symbol}&i=d&d1=${startDate}&d2=${endDate}`;
+  const stockResponse = await fetch(url, { cache: 'no-store' });
+  const stockCsv = await stockResponse.text();
+  const stockRows = parseStooqCsv(stockCsv, symbol);
+  
+  // Prep for Json
   const byDateObj = Object.fromEntries(stockRows) as Record<string, StooqStock>;
   const jsonData = JSON.stringify(byDateObj, null, 2);
-
   return jsonData;
 }
 
@@ -82,14 +82,15 @@ export async function GET(request: Request){
   
   // Reponse Payload + Options Object (Init)
   const jsonData = await fetchStooqEod(symbol);
-  const headers = new Headers({
+  
+  const headers = {
     "Content-Type": "application/json"
-  })
+  };
   const init = {
     status: 200,
     statusText: "OK",
     headers: headers
-  }
+  };
 
   const response = new Response(jsonData, init)
   return response
