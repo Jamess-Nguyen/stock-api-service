@@ -19,7 +19,7 @@ async function GET(request: Request){
   const headers = new Headers({"content-type" : "application/json"})
   const init = {
     status: success,
-    statusText: "ok",
+    statusText: "OK",
     headers: headers
   }
 
